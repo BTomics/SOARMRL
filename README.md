@@ -21,10 +21,10 @@ src/soarmrl/    deployment bridge + sim-vs-real trajectory logging (Weeks 5–6)
 
 ## Roadmap (summer 2026)
 
-1. **Week 1** — order parts, print, set up both software stacks *(this repo's scaffold)*
-2. **Weeks 2–3** — train `SO-ARM100-Reach-v0` headless on the A10 while servos ship
+1. **Week 1** — order parts, print, set up both software stacks *(done — including the trained reach policy, ahead of schedule)*
+2. **Weeks 2–3** — understand the env, tune domain randomization; bridge milestone M1 (offline policy inference)
 3. **Week 4** — set servo IDs → assemble → calibrate
-4. **Weeks 5–6** — deployment bridge: policy inference on the laptop → joint-position targets via the LeRobot API (~30 Hz) → encoder states back as observations; log real-vs-sim trajectories
+4. **Weeks 5–6** — deployment bridge on the real arm: policy inference → joint-position targets via the LeRobot API (~30 Hz) → encoder states back as observations; log real-vs-sim trajectories; finale: **scripted pick-up of a predetermined object** (`src/soarmrl/grasp.py`)
 5. **Week 7** — demo video + writeup
 
 ## Upstream
