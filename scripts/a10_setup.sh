@@ -46,8 +46,19 @@ if [ ! -d "$REPO_DIR" ]; then
     git clone "$REPO_URL" "$REPO_DIR"
 fi
 
-echo "==> uv sync (downloads Isaac Sim — this is the long part, tens of GB)"
+# flatdict (isaaclab dep) needs pkg_resources, removed in new setuptools;
+# upstream fix is PR #87, unmerged — patch pyproject until it lands
 cd "$REPO_DIR"
+if ! grep -q "extra-build-dependencies" pyproject.toml; then
+    echo "==> Patching pyproject.toml for the flatdict build (upstream PR #87)"
+    cat >> pyproject.toml <<'EOF'
+
+[tool.uv.extra-build-dependencies]
+flatdict = ["setuptools<72"]
+EOF
+fi
+
+echo "==> uv sync (downloads Isaac Sim — this is the long part, tens of GB)"
 uv sync
 
 # Auto-accept the Isaac Sim EULA so the first launch doesn't stall on a prompt
