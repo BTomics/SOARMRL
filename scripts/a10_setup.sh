@@ -46,15 +46,23 @@ if [ ! -d "$REPO_DIR" ]; then
     git clone "$REPO_URL" "$REPO_DIR"
 fi
 
-# flatdict (isaaclab dep) needs pkg_resources, removed in new setuptools;
-# upstream fix is PR #87, unmerged — patch pyproject until it lands
+# Several old deps (flatdict et al., see upstream PR #87) import pkg_resources
+# at build time, which new setuptools removed — pin old setuptools for all
+# source builds until upstream fixes its tree
 cd "$REPO_DIR"
-if ! grep -q "extra-build-dependencies" pyproject.toml; then
-    echo "==> Patching pyproject.toml for the flatdict build (upstream PR #87)"
-    cat >> pyproject.toml <<'EOF'
-
-[tool.uv.extra-build-dependencies]
-flatdict = ["setuptools<72"]
+if ! grep -q "build-constraint-dependencies" pyproject.toml; then
+    echo "==> Patching pyproject.toml: setuptools<72 for source builds"
+    python3 - <<'EOF'
+import re, pathlib
+p = pathlib.Path("pyproject.toml")
+t = p.read_text()
+if re.search(r"^\[tool\.uv\]$", t, re.M):
+    t = re.sub(r"^\[tool\.uv\]$",
+               '[tool.uv]\nbuild-constraint-dependencies = ["setuptools<72"]',
+               t, count=1, flags=re.M)
+else:
+    t += '\n[tool.uv]\nbuild-constraint-dependencies = ["setuptools<72"]\n'
+p.write_text(t)
 EOF
 fi
 
