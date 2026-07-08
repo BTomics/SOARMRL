@@ -22,10 +22,12 @@ src/soarmrl/    deployment bridge + sim-vs-real trajectory logging (Weeks 5–6)
 ## Roadmap (summer 2026)
 
 1. **Week 1** — order parts, print, set up both software stacks *(done — including the trained reach policy, ahead of schedule)*
-2. **Weeks 2–3** — understand the env, tune domain randomization; bridge milestone M1 (offline policy inference)
+2. **Weeks 2–3** — **my own RL task**: `SO-ARM101-Lift-v0` in a fork (cube-lift, own reward + DR — see [docs/lift_task.md](docs/lift_task.md)); bridge milestone M1 on the side (offline policy inference)
 3. **Week 4** — set servo IDs → assemble → calibrate
-4. **Weeks 5–6** — deployment bridge on the real arm: policy inference → joint-position targets via the LeRobot API (~30 Hz) → encoder states back as observations; log real-vs-sim trajectories; finale: **scripted pick-up of a predetermined object** (`src/soarmrl/grasp.py`)
+4. **Weeks 5–6** — deployment bridge on the real arm: reach policy → scripted pick-up of a predetermined object (`src/soarmrl/grasp.py`) → attempt the learned lift policy; log real-vs-sim trajectories throughout
 5. **Week 7** — demo video + writeup
+
+**Fallback ladder** (every rung is a valid demo): ① reach deploys → ② scripted pick-up → ③ own lift policy in sim → ④ lift transfers to hardware. Contact-rich sim-to-real may kill rung ④ — quantifying *why* is a result, not a failure.
 
 ## Upstream
 
