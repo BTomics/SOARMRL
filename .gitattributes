@@ -1,0 +1,2 @@
+# Scripts run on the Linux VM — never let Windows checkouts CRLF them
+*.sh text eol=lf
