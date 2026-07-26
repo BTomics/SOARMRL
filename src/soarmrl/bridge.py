@@ -221,12 +221,17 @@ def slow_blend(prev_sent: list[float], target: list[float], slow: float) -> list
 
 
 def reach_hold(robot, policy, pose_command, n_ticks, slow, max_delta,
-               hz: float = 30.0, verbose: bool = False) -> list[float]:
+               hz: float = 30.0, verbose: bool = False, gripper_rad=None) -> list[float]:
     """Drive the reach policy toward pose_command for n_ticks at hz: each tick
     reads encoders, builds the obs, runs the policy, then scales -> slow-blends
     -> delta-clamps the target and sends it. Assumes the arm is already at a
-    valid in-distribution start (ramp there with go_to first). The gripper is
-    held fixed by targets_to_action. Returns the final 6-joint position (rad).
+    valid in-distribution start (ramp there with go_to first). Returns the final
+    6-joint position (rad).
+
+    gripper_rad: None (default) holds the gripper at GRIPPER_HOLD_N (~0 rad) as the
+    plain reach deployment does. Pass a radian target to keep a grasped object held
+    while the reach policy carries it (e.g. grasp_bridge.GRIPPER_HOLD_RAD) — the
+    reach policy never actuates the gripper, so this is a pure pass-through.
 
     The finite-difference velocity block of the obs is zeroed: on real hardware
     it is noisy/lagged and, with actuation latency, drives a limit cycle
@@ -251,7 +256,7 @@ def reach_hold(robot, policy, pose_command, n_ticks, slow, max_delta,
             action = policy(torch.tensor([obs], dtype=torch.float32)).squeeze(0).tolist()
 
         clamped = clamp_delta(prev_sent, slow_blend(prev_sent, scale_action(action), slow), max_delta)
-        robot.send_action(conversion.targets_to_action(clamped))
+        robot.send_action(conversion.targets_to_action(clamped, gripper_rad))
 
         prev_sent = clamped
         prev_joint_pos = conversion.obs_to_joint_pos(observation)

@@ -32,7 +32,7 @@ LIMITS = {
     "shoulder_pan": (-2.0, 2.0),
     "shoulder_lift": (0.0, 3.5),
     "elbow_flex": (-3.14158, 0.0),
-    "wrist_flex": (-2.5, 1.2),
+    "wrist_flex": (-1.658, 1.658),  # URDF so_arm101 wrist_flex limit; was (-2.5, 1.2) which clamped the lift home (1.57)
     "wrist_roll": (-3.14158, 3.14158),
     "gripper": (-0.2, 2.0),
 }
@@ -61,13 +61,19 @@ def obs_to_joint_pos(obs: dict[str, float]) -> list[float]:
     return [n_to_rad(j, obs[f"{j}.pos"]) for j in JOINTS]
 
 
-def targets_to_action(targets_rad: list[float]) -> dict[str, float]:
+def targets_to_action(targets_rad: list[float], gripper_rad: float | None = None) -> dict[str, float]:
     """5 arm joint targets (rad, sim order) -> LeRobot send_action() dict:
-    5 converted+clamped arm entries plus the held gripper. Clamp to LIMITS
-    in radians BEFORE converting."""
+    5 converted+clamped arm entries plus the gripper. Clamp to LIMITS in
+    radians BEFORE converting. gripper_rad=None holds the gripper at
+    GRIPPER_HOLD_N (the reach policy does not actuate it); pass a radian target
+    to drive it (the grasp/lift policy)."""
     action = {}
     for i, j in enumerate(ARM_JOINTS):
         lower, upper = LIMITS[j]
         action[f"{j}.pos"] = rad_to_n(j, min(max(targets_rad[i], lower), upper))
-    action["gripper.pos"] = GRIPPER_HOLD_N
+    if gripper_rad is None:
+        action["gripper.pos"] = GRIPPER_HOLD_N
+    else:
+        lo, hi = LIMITS["gripper"]
+        action["gripper.pos"] = rad_to_n("gripper", min(max(gripper_rad, lo), hi))
     return action
