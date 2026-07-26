@@ -11,6 +11,15 @@ Build a [SO-ARM101](https://github.com/TheRobotStudio/SO-ARM100) follower arm, t
 
 Training never runs on the laptop; hardware never connects to the VM. The handoff between them is an exported policy file (checked into `policies/`).
 
+### Deployed policies & their training source
+
+Each checkpoint in `policies/` was trained in the [BTomics/isaac_so_arm101](https://github.com/BTomics/isaac_so_arm101) fork and exported here alongside its `env.yaml` (the ground-truth obs/action spec the bridge reproduces):
+
+- `policies/policy.pt` — reach policy.
+- `policies/lift_policy.pt` (+ `lift_params/env.yaml`) — lift/grasp policy, retrained for deployment smoothness with an `action_l2` action-magnitude penalty and a reduced action scale so a rate-limited real arm can track it. Training change: `BTomics/isaac_so_arm101` @ `<commit-hash>`.
+
+On hardware the lift policy grasps and lifts, and `scripts/grasp/grasp_carry.py` composes it with the reach policy — the lift policy grabs the cube, then reach carries it to a commanded pose.
+
 ## Repo layout
 
 ```
