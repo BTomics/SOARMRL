@@ -16,7 +16,7 @@ Training never runs on the laptop; hardware never connects to the VM. The handof
 Each checkpoint in `policies/` was trained in the [BTomics/isaac_so_arm101](https://github.com/BTomics/isaac_so_arm101) fork and exported here alongside its `env.yaml` (the ground-truth obs/action spec the bridge reproduces):
 
 - `policies/policy.pt` — reach policy.
-- `policies/lift_policy.pt` (+ `lift_params/env.yaml`) — lift/grasp policy, retrained for deployment smoothness with an `action_l2` action-magnitude penalty and a reduced action scale so a rate-limited real arm can track it. Training change: `BTomics/isaac_so_arm101` @ `<commit-hash>`.
+- `policies/lift_policy.pt` (+ `lift_params/env.yaml`) — lift/grasp policy, retrained for deployment smoothness with an `action_l2` action-magnitude penalty and a reduced action scale so a rate-limited real arm can track it. Training change: [`BTomics/isaac_so_arm101` @ `c5432ea`](https://github.com/BTomics/isaac_so_arm101/commit/c5432ea).
 
 On hardware the lift policy grasps and lifts, and `scripts/grasp/grasp_carry.py` composes it with the reach policy — the lift policy grabs the cube, then reach carries it to a commanded pose.
 
