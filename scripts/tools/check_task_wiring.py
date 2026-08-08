@@ -83,10 +83,33 @@ def config_terms(cfg_path: pathlib.Path):
     return out
 
 
+def resume_pinned(cfg_path: pathlib.Path):
+    """The PINNED dict on the _RESUME env cfg: reward term -> converged weight.
+
+    Resuming re-fires every curriculum term against a trained policy, so the
+    _RESUME variant clears the curriculum and pins each weight to its endpoint.
+    A curriculum term missing from PINNED means the resumed run silently uses the
+    base weight - for lifting_object that is 15, the hover regime.
+    """
+    tree = ast.parse(cfg_path.read_text(encoding="utf-8"))
+    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+        if not cls.name.endswith("_RESUME"):
+            continue
+        for stmt in cls.body:
+            if isinstance(stmt, ast.Assign) and getattr(stmt.targets[0], "id", "") == "PINNED" \
+                    and isinstance(stmt.value, ast.Dict):
+                # literal_eval, not .value - a negative weight like -1e-1 parses
+                # as UnaryOp(USub, Constant), which has no .value attribute.
+                return {k.value: ast.literal_eval(v) for k, v in
+                        zip(stmt.value.keys, stmt.value.values) if isinstance(k, ast.Constant)}
+    return None
+
+
 def main():
     sigs, reads_joints = local_functions(TASK / "mdp")
     terms = config_terms(TASK / "pickplace_env_cfg.py")
     rewards = {name for _, name, node in terms if node.func.id == "RewTerm"}
+    pinned = resume_pinned(TASK / "joint_pos_env_cfg.py")
 
     checked, skipped, problems = [], [], []
     for _, tname, node in terms:
@@ -105,11 +128,16 @@ def main():
             steps = steps.value if isinstance(steps, ast.Constant) else None
             if ref not in rewards:
                 problems.append(f"curriculum {tname}: term_name {ref!r} is not a reward term")
+            elif pinned is not None and ref not in pinned:
+                problems.append(
+                    f"curriculum {tname}: {ref!r} is not in the _RESUME config's PINNED dict "
+                    "-> a resumed run silently reverts it to its base weight")
             else:
                 # num_steps counts ENVIRONMENT steps, ~24 per training iteration.
                 # This units trap has cost this project two runs.
                 at = f"iter ~{steps // 24}" if isinstance(steps, int) else "?"
-                checked.append(f"{'curriculum ' + tname:34s} -> {ref:26s} fires {at}")
+                pin = f"  [resume pins {pinned[ref]}]" if pinned else ""
+                checked.append(f"{'curriculum ' + tname:34s} -> {ref:26s} fires {at}{pin}")
             continue
 
         if fname not in sigs:
