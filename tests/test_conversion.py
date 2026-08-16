@@ -24,7 +24,11 @@ DEFAULT_POSE_ROW = {
     "shoulder_pan": 10.99,
     "shoulder_lift": 5.98,
     "elbow_flex": 1.58,
-    "wrist_flex": 89.6,
+    # 55.3, not the old 89.6: wrist_flex's calibration reference was corrected
+    # by physical measurement 2026-08-16 (see conversion.CALIB). The 89.6 here was
+    # recorded at a pose ASSUMED to be 1.0 rad that was really ~1.5 rad, so this
+    # fixture was encoding the same 0.644 rad error the constants were.
+    "wrist_flex": 55.3,
     "wrist_roll": -47.76,
     "gripper": 0.32,
 }

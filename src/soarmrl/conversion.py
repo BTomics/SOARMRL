@@ -20,7 +20,18 @@ CALIB = {
     "shoulder_pan": (+1, 0.01953, 10.99, 0.0),
     "shoulder_lift": (+1, 0.01870, 5.98, 1.57),
     "elbow_flex": (+1, 0.01707, 1.58, -1.57),
-    "wrist_flex": (+1, 0.01875, 89.6, 1.0),
+    # CORRECTED 2026-08-16 by physical measurement (scripts/bringup/wrist_check.py).
+    # Was (89.6, 1.0), which was never measured — it was derived by walking back
+    # from the +100 end stop. It was wrong by 0.644 rad, and that single error is
+    # the root cause of three separate symptoms: the PickPlace home (1.57) looked
+    # unreachable, ~48% of the policy's wrist commands appeared to saturate, and
+    # the lift bridge needed a 2x ACTION_SCALE to stop the arm undershooting.
+    # Measurement: commanded the home pose with shoulder_lift/elbow_flex confirmed
+    # at ~0 (so the gripper angle isolates the wrist); encoder read n=85.7 while a
+    # phone level showed the gripper 6 deg from vertical, which FK puts at 1.57 rad.
+    # Reachable range goes [-2.555,+1.195] -> [-1.912,+1.838], so the whole URDF
+    # range now fits with room at both ends.
+    "wrist_flex": (+1, 0.01875, 85.7, 1.57),
     # PROVISIONAL: direction unconfirmed (jar-lid test pending); n_default
     # assumes direction +1 (quarter turn below the 2.24 reading at roll=0).
     "wrist_roll": (+1, 0.03141, -47.76, -1.57),
