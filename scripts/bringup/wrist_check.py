@@ -49,7 +49,10 @@ def main() -> None:
     ap.add_argument("--port", required=True)
     ap.add_argument("--id", required=True)
     ap.add_argument("--seconds", type=float, default=8.0, help="ramp time")
+    ap.add_argument("--wrist", type=float, default=1.57,
+                    help="wrist_flex target in rad; take two points to fit the offset")
     args = ap.parse_args()
+    PICKPLACE_HOME[3] = args.wrist
 
     robot = SO101Follower(SO101FollowerConfig(port=args.port, id=args.id))
     robot.connect()
@@ -63,18 +66,17 @@ def main() -> None:
         time.sleep(0.5)
 
         rad, norm = read(robot)
-        wf_rad, wf_n = rad[3], norm[3]
-        print("\ncommanded wrist_flex 1.570 rad (normalized 120.0)")
-        print(f"reached   wrist_flex {wf_rad:.3f} rad (normalized {wf_n:.1f})")
-        if wf_n >= 99.0:
-            print("  -> SATURATED at the servo's range_max, as predicted")
-        else:
-            print("  -> did NOT saturate; the range assumption is wrong, tell Claude")
+        print(f"\ncommanded wrist_flex {args.wrist:.3f} rad "
+              f"(normalized {conversion.rad_to_n('wrist_flex', args.wrist):.1f})")
+        print("\nHELD POSE — all joints (the other pitch joints must read ~0 for the")
+        print("gripper angle to isolate wrist_flex):")
+        print(f"  {'joint':15}{'rad (per CALIB)':>18}{'normalized':>13}")
+        for j, r, n in zip(conversion.JOINTS, rad, norm):
+            flag = "  <-- should be ~0" if j in ("shoulder_lift", "elbow_flex") else ""
+            print(f"  {j:15}{r:+18.3f}{n:13.1f}{flag}")
 
-        print("\nNOW MEASURE: hold a phone level flat against the gripper.")
-        print("  ~6 deg from vertical  -> calibration is WRONG (joint reached 1.57)")
-        print("  ~28 deg from vertical -> servo really is short (stopped at 1.195)")
-        input("\npress Enter to ramp back...")
+        print("\nNOW MEASURE the gripper angle from vertical with a phone level.")
+        input("press Enter to ramp back...")
     except KeyboardInterrupt:
         print("\ninterrupted")
     finally:
