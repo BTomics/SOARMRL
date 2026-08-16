@@ -15,6 +15,126 @@ end-effector withdrawn 50 mm. It's a harder bar than most demos report.
 
 ---
 
+## The capability ladder — what it learned to do, in order
+
+Nothing here arrived at once. Each new ability had to be **bought with a specific
+reward term**, and each one first failed in its own legible way. The pattern
+repeats so consistently it's arguably the real story:
+
+> Add the ability to do X → the policy finds a way to score well *without* doing X
+> → the arithmetic shows why that pays better → fix the balance → X appears.
+
+| # | new capability | what bought it | what it did first instead |
+|---|---|---|---|
+| 1 | reach a commanded pose | goal-tracking reward | hunted and oscillated on hardware |
+| 2 | close on the cube | reach + grasp shaping | parked 19 mm away, couldn't close |
+| 3 | lift it clear of the table | `lifting_object` | slid it along the table |
+| 4 | carry it toward a goal | latched goal tracking | farmed tracking without ever picking up |
+| 5 | **set it down** | `object_at_target_on_table` | **hovered above the target forever** |
+| 6 | come to rest, not drop | `object_at_rest` | dropped it from height |
+| 7 | **let go** | `object_released` | held on after a perfect placement |
+| 8 | withdraw and go home | `joint_deviation` | flailed into a contorted pose after release |
+| 9 | grasp top-down, not sideways | `grasp_top_down` | carried the cube at ~65° off vertical |
+| 10 | do it across a wider region | wider goal box + penalty ramp | lost the pick entirely, twice |
+
+### Stage 3–4: pick and carry (the baseline)
+
+The upstream lift task gave a working pick. After the workspace fix and a reset:
+**cube off the table 80% of steps, gripper 2.0 cm from the cube, cube landing
+~6.3 cm from the commanded point** at 4000 iterations.
+
+But the goal was a weak knob — the policy had learned "lift the cube to roughly
+this region," not "track this setpoint." That distinction mattered later.
+
+**The anti-slide latch** was the structural piece here. Every place reward is gated
+behind "has this cube *ever* been lifted clear this episode." Without it a policy
+can shove the cube along the table into the goal and collect everything. Sliding
+never sets the latch, so it earns nothing.
+
+Worth noting the latch was validated by a *negative* result: goal tracking sits at
+exactly 0.0 until iteration ~600 and only rises in step with the lift. If it were
+leaking across episode boundaries it would have been paying from iteration zero.
+
+### Stage 5: setting it down — the hardest single step
+
+Moving the goal from mid-air onto the table is the whole task, and it's where
+every earlier attempt had died. The reason is a contradiction that's easy to write
+by accident:
+
+**the reward for being near the goal was gated on the cube being airborne.** So the
+reward switched off exactly as the cube arrived. The policy was being punished for
+finishing.
+
+Fixing that gate wasn't enough on its own, because of the hovering economics
+(27.2/step vs 21.0 — see below). It took both: a placement reward that stays alive
+*through* the descent, with a tight vertical kernel so the last few centimetres are
+the steepest part of the gradient, **and** decaying the lift bonus once the pick
+was reliably learned.
+
+Result: cube distance to goal went from ~9 cm to ~4 cm, and the arm started
+committing to the descent instead of hovering.
+
+### Stage 6–7: rest, then release
+
+Placement immediately produced a new failure that looked like success. The arm
+carried the cube to the goal and **dropped it** — from a few centimetres up, and
+sometimes near the goal rather than on it.
+
+Nothing objected, because **a dropped cube and a placed cube score identically once
+both come to rest.** The reward couldn't tell them apart. Lift duty fell 70% → 13%
+and the gripper drifted 2.0 → 4.7 cm from the cube; the policy had discovered that
+letting go early was cheaper than carrying all the way down.
+
+Two terms fixed it. One rewards the cube being genuinely *at rest* — low linear
+**and** angular velocity, gated on being at the target, so a still cube in the
+wrong place scores nothing. The other rewards opening the gripper, but only once
+the cube is already placed and settled, so an early drop earns nothing.
+
+There was a subtler coupling too: an always-on reach reward pays the arm to stay
+near the cube it is supposed to *release*, and directly contradicts the success
+condition's requirement to withdraw 5 cm. Gating the reach term off after the pick
+removed that contradiction.
+
+### Stage 8–9: posture, and the flail after release
+
+With placement working, what remained was ugly rather than wrong: the arm carried
+the cube in a contorted, sideways grip and then flailed back into a strange pose
+after letting go.
+
+Measured, the carry posture was worse than a *random* arm configuration — the
+policy had an active preference for a sideways grip, not a missing gradient. And
+the reset pose turns out to be 6° from straight down, so pulling toward home was
+pulling toward *good* posture, not away from it.
+
+This stage cost the most runs for the least gain, and produced the "ship one term
+per run" lesson the hard way.
+
+### Stage 10: doing it over a wider region
+
+The final increment pushed the goal region 5 cm further out and away from the base.
+The success rate went **up** — 56.5% against 55.3% — on a region where the measured
+availability of a top-down grasp is meaningfully worse (0.672 vs 0.766).
+
+Getting there took three failed runs, all of them about the penalty curriculum
+rather than the box, and all of them covered below.
+
+### Where the numbers landed
+
+| stage | place success |
+|---|---|
+| placement wired, first working version | — (cube ~4 cm from goal) |
+| release + rest added | first non-zero |
+| posture term, 4000 iterations | 10.1% |
+| same config, 12 000 iterations | 55.3% |
+| wider goal box + penalty ramp, 12 000 | **56.5%** |
+
+The jump from 10.1% to 55.3% is worth dwelling on: **it's the same configuration,
+just trained three times longer.** A run that looks like a mediocre result at 4000
+iterations was nowhere near converged. Several earlier increments were probably
+judged too early.
+
+---
+
 ## Part 1 — Teaching it to pick (the 11-run losing streak)
 
 ### The arithmetic that broke the streak
@@ -335,33 +455,52 @@ Composition beat retraining.
 
 ## The transferable lessons
 
-1. **Do the reward arithmetic before training.** Compute what each competing
+1. **Every new capability gets bought, and first fails in a specific way.** The
+   pattern held at all ten rungs: add the ability to do X, watch the policy find a
+   way to score well *without* doing X, work out why that pays better, rebalance.
+   Budget for the second step — it isn't a setback, it's the mechanism.
+2. **Do the reward arithmetic before training.** Compute what each competing
    behaviour pays per step and check the one you want wins. Most "the policy is
    broken" cases are the policy being right about a reward function that's wrong.
-2. **Convert reward numbers into physical units.** A number you can't state in
+3. **Watch for rewards that switch off on success.** The place reward was gated on
+   the cube being airborne, so it died exactly as the cube arrived — the policy was
+   punished for finishing. Any gate that closes at the goal is this bug.
+4. **Two behaviours that score identically will not be distinguished.** A dropped
+   cube and a placed cube look the same once both are at rest. If you can't tell
+   them apart in the reward, neither can the policy.
+5. **Train longer before judging.** The same configuration read 10.1% at 4000
+   iterations and 55.3% at 12 000. Several earlier increments were probably called
+   on runs that hadn't converged.
+6. **Convert reward numbers into physical units.** A number you can't state in
    millimetres isn't a diagnosis.
-3. **Measure the workspace instead of inheriting it.** Two real bugs came from
+7. **Measure the workspace instead of inheriting it.** Two real bugs came from
    sampling kinematics; neither was visible in code review. And a workspace
    measurement is only valid at the height you took it.
-4. **Ship one change per run.** Bundling is most tempting exactly when it's most
+8. **Ship one change per run.** Bundling is most tempting exactly when it's most
    expensive.
-5. **Big discontinuities have no safe landing spot.** Ramp them. Cost scales with
+9. **Big discontinuities have no safe landing spot.** Ramp them. Cost scales with
    how much behaviour there is to disrupt.
-6. **A policy moving downhill is never optimising.** Look at the optimiser, not the
+10. **A policy moving downhill is never optimising.** Look at the optimiser, not the
    rewards.
-7. **Plot the curve; point samples lie.** Especially near curriculum events.
-8. **Write down falsifiable predictions in the config.** Several of mine were
+11. **Plot the curve; point samples lie.** Especially near curriculum events.
+12. **Write down falsifiable predictions in the config.** Several of mine were
    falsified, and being able to see that in a comment was worth more than being
    right would have been.
-9. **Some bugs are only observable physically.** Symmetric sign errors cancel in
+13. **Some bugs are only observable physically.** Symmetric sign errors cancel in
    every software check you'll write.
-10. **Check limits in the unit they're enforced in.** A radian clamp doesn't protect
+14. **Check limits in the unit they're enforced in.** A radian clamp doesn't protect
     a servo that thinks in normalized ticks.
 
 ---
 
 ## Candidate post angles
 
+- **"Ten things a robot had to learn to put a block down — and how each one first
+  went wrong."** The capability ladder as the spine. Strongest option for a general
+  audience: it's a progression story rather than a debugging story, the failures
+  are individually funny (hovered forever, dropped it from height, held on after a
+  perfect placement), and the repeating pattern lands as a real insight. Carries a
+  visual too — the ladder table, or before/after renders.
 - **"My robot refused to finish the task, and it was right."** The hovering
   economics — 27.2 vs 21.0 per step. Single beat, concrete numbers, a
   counterintuitive punchline. Probably the most shareable.
